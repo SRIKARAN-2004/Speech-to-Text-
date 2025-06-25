@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>🎤 Live Voice Typing with Deepgram</title>
+  <style>
+    body { font-family: sans-serif; padding: 2rem; text-align: center; }
+    textarea { width: 80%; height: 200px; margin-top: 20px; font-size: 1rem; }
+    button { padding: 10px 20px; font-size: 1rem; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>🎤 Voice-to-Text (Live) with Deepgram</h1>
+  <button id="startBtn">Start Listening</button>
+  <textarea id="output" placeholder="Speak something..."></textarea>
+
+  <script type="module">
+    const startBtn = document.getElementById('startBtn');
+    const output = document.getElementById('output');
+
+    let isListening = false;
+    let mediaRecorder;
+    let socket;
+
+    // ✅ Your Deepgram API Key
+    const DEEPGRAM_API_KEY = 'e6e40da5bfa843b50489f6641d842662014903dc';
+
+    startBtn.addEventListener('click', async () => {
+      if (isListening) {
+        socket?.close();
+        mediaRecorder?.stop();
+        startBtn.textContent = 'Start Listening';
+        isListening = false;
+        return;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder = new MediaRecorder(stream);
+      isListening = true;
+      startBtn.textContent = 'Stop Listening';
+
+      // ✅ Connect to Deepgram WebSocket
+      socket = new WebSocket(`wss://api.deepgram.com/v1/listen?punctuate=true`, [
+        'token',
+        DEEPGRAM_API_KEY
+      ]);
+
+      socket.onopen = () => {
+        mediaRecorder.addEventListener('dataavailable', (event) => {
+          if (event.data.size > 0 && socket.readyState === 1) {
+            socket.send(event.data);
+          }
+        });
+        mediaRecorder.start(250); // send audio chunks every 250ms
+      };
+
+      socket.onmessage = (message) => {
+        const data = JSON.parse(message.data);
+        const transcript = data.channel?.alternatives[0]?.transcript;
+        if (transcript) {
+          output.value = transcript;
+        }
+      };
+
+      socket.onerror = (e) => console.error('Socket error', e);
+      socket.onclose = () => console.log('Socket closed');
+    });
+  </script>
+</body>
+</html>
